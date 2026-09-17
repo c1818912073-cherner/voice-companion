@@ -28,12 +28,22 @@ CACHE_DIR = os.path.join(HERE, ".classics_cache")
 API = "https://zh.wikisource.org/w/api.php"
 UA = "voice-companion classics fetcher (personal local audiobook shelf)"
 
-# 维基文库书名 → (输出文件名, 回数, 回目页名格式)
+def chapters(fmt, n):
+    return [fmt.format(i) for i in range(1, n + 1)]
+
+
+# 维基文库书名 → (输出文件名, 章节页名列表)
 BOOKS = {
-    "紅樓夢": ("红楼梦.txt", 120, "第{:03d}回"),
-    "三國演義": ("三国演义.txt", 120, "第{:03d}回"),
-    "西遊記": ("西游记.txt", 100, "第{:03d}回"),
-    "水滸傳 (120回本)": ("水浒传.txt", 120, "第{:03d}回"),
+    # 四大名著
+    "紅樓夢": ("红楼梦.txt", chapters("第{:03d}回", 120)),
+    "三國演義": ("三国演义.txt", chapters("第{:03d}回", 120)),
+    "西遊記": ("西游记.txt", chapters("第{:03d}回", 100)),
+    "水滸傳 (120回本)": ("水浒传.txt", chapters("第{:03d}回", 120)),
+    # 特色公版：晚清讽刺 / 志怪
+    "老殘遊記": ("老残游记.txt", chapters("第{:02d}回", 20)),
+    "官場現形記": ("官场现形记.txt", chapters("{:02d}", 60)),
+    "儒林外史": ("儒林外史.txt", chapters("第{:02d}回", 56)),
+    "聊齋志異": ("聊斋志异.txt", chapters("第{:02d}卷", 12)),
 }
 
 _TMPL = re.compile(r"\{\{[^{}]*\}\}")
@@ -101,15 +111,15 @@ def fetch(url):
     raise RuntimeError("unreachable")
 
 
-def fetch_book(ws_name, fmt, out_path):
+def fetch_book(ws_name, pages, out_path):
     cache = os.path.join(CACHE_DIR, ws_name)
     os.makedirs(cache, exist_ok=True)
-    total = fmt[1]
-    for n in range(1, total + 1):
+    total = len(pages)
+    for n, ch in enumerate(pages, 1):
         cf = os.path.join(cache, f"{n:04d}.txt")
         if os.path.exists(cf):
             continue
-        page = f"{ws_name}/{fmt[2].format(n)}"
+        page = f"{ws_name}/{ch}"
         q = urllib.parse.urlencode(
             {"action": "parse", "format": "json", "prop": "wikitext", "page": page})
         d = json.loads(fetch(f"{API}?{q}").decode("utf-8"))
@@ -120,7 +130,7 @@ def fetch_book(ws_name, fmt, out_path):
             raise RuntimeError(f"{page}: 清洗后为空")
         with open(cf, "w", encoding="utf-8") as f:
             f.write(text)
-        done = sum(1 for _ in range(1, n + 1) if os.path.exists(os.path.join(cache, f"{_:04d}.txt")))
+        done = sum(1 for i in range(1, n + 1) if os.path.exists(os.path.join(cache, f"{i:04d}.txt")))
         print(f"  {page} ✓ ({len(text)} 字, {done}/{total})", flush=True)
         time.sleep(1.0)
     chapters = []
@@ -136,15 +146,15 @@ def fetch_book(ws_name, fmt, out_path):
 def main():
     os.makedirs(OUT_DIR, exist_ok=True)
     only = set(sys.argv[1:])
-    for ws_name, fmt in BOOKS.items():
-        if only and ws_name not in only:
+    for ws_name, (fname, pages) in BOOKS.items():
+        if only and not any(a in ws_name or a in fname for a in only):
             continue
-        out_path = os.path.join(OUT_DIR, fmt[0])
+        out_path = os.path.join(OUT_DIR, fname)
         if os.path.exists(out_path):
             print(f"跳过 {ws_name}（已存在）")
             continue
         print(f"《{ws_name}》下载中…", flush=True)
-        fetch_book(ws_name, fmt, out_path)
+        fetch_book(ws_name, pages, out_path)
 
 
 if __name__ == "__main__":
