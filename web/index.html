@@ -128,8 +128,13 @@ main{position:relative;z-index:1;flex:1;padding:4px 30px 46px;max-width:1140px;w
 .book.sel{border-color:rgba(139,124,248,.6);
   background:linear-gradient(135deg,rgba(139,124,248,.16),rgba(94,200,248,.08));
   box-shadow:0 6px 20px rgba(139,124,248,.18)}
-.bicon{width:38px;height:38px;border-radius:11px;flex-shrink:0;display:flex;align-items:center;
-  justify-content:center;font-size:18px;background:rgba(139,124,248,.18)}
+.bcover{width:40px;height:52px;border-radius:5px 10px 10px 5px;flex-shrink:0;position:relative;
+  background:linear-gradient(155deg,var(--c1),var(--c2));
+  display:flex;align-items:center;justify-content:center;
+  box-shadow:0 5px 14px rgba(0,0,0,.4),inset 3px 0 6px rgba(255,255,255,.16)}
+.bcover::before{content:'';position:absolute;left:5px;top:0;bottom:0;width:1.5px;background:rgba(0,0,0,.22)}
+.bcover i{font-style:normal;font-size:17px;font-weight:800;color:rgba(255,255,255,.95);
+  text-shadow:0 1px 3px rgba(0,0,0,.35)}
 .bmeta{flex:1;min-width:0}
 .bmeta .nm{font-size:13.5px;font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .bmeta .pr{font-size:11px;color:var(--faint);margin-top:3px;display:flex;align-items:center;gap:6px}
@@ -455,7 +460,8 @@ async function refreshBooks(){
     const div=document.createElement('div');
     div.className='book'+(R.book===b.name?' sel':'');
     const done = b.total>0 && b.idx>=b.total-0.5 ? ' · 已读完' : '';
-    div.innerHTML=`<div class="bicon">📕</div>
+    const stem = b.name.replace(/\.[^.]+$/, '');
+    div.innerHTML=`<div class="bcover" style="--c1:${spkColor(b.name)};--c2:${spkColor(b.name+'x')}"><i>${esc(stem[0]||'书')}</i></div>
       <div class="bmeta">
         <div class="nm">${esc(b.name)}</div>
         <div class="pr">${b.total?`读到 ${Math.min(b.idx+1,b.total)}/${b.total} 段`:'尚未打开'}${done}</div>

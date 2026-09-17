@@ -50,6 +50,17 @@
 
 ## 快速开始
 
+### 内置公版经典书架
+
+仓库自带脚本，可从[维基文库](https://zh.wikisource.org)一键下载**公有领域**经典全文（《红楼梦》《三国演义》《西游记》《水浒传》），自动清洗为纯文本并放入书架：
+
+```bash
+python3 tools/fetch_classics.py            # 抓全部（每本约 2-3 分钟，断点续抓）
+python3 tools/fetch_classics.py 紅樓夢      # 只抓某本
+```
+
+打开书即自动按「旁白/角色/台词」切分（支持"曰/問/謂"等文言说话动词），点**深度识别人物**后由本地 LLM 识别每个角色的性别与身份并自动配音。
+
 ### 依赖
 
 - macOS（Apple Silicon）+ [omlx](https://github.com/omlx-ai/omlx) 正在运行（默认 `127.0.0.1:8880`）
@@ -128,6 +139,7 @@ voice-companion/
 ├── voice_companion.py   # 终端版 + 核心能力（录音/识别/合成/对话）
 ├── novel_engine.py      # 小说分角色切分 + 人物识别
 ├── web/index.html       # 单页前端（无构建、无框架）
+├── tools/fetch_classics.py  # 公版经典下载器（维基文库 → books/）
 ├── config.json          # 默认配置
 ├── books/               # 书库与听书进度（git 忽略）
 ├── docs/screenshots/    # README 截图
@@ -139,6 +151,16 @@ voice-companion/
 - 朗读暂停后恢复会从**本段开头**重播（系统播放器不支持从中途续播）
 - 首次对话会弹出麦克风授权，请允许
 - 仅监听 `127.0.0.1`，适合本机使用；如需局域网访问请自行加鉴权
+
+## 版权与商用
+
+| 内容 | 权利状态 |
+|---|---|
+| 本仓库代码 | [MIT](LICENSE)，可自由商用 |
+| `tools/fetch_classics.py` 下载的经典原文 | 明代/清代作品，**已进入公有领域**，可自由使用与商用（文本取自维基文库） |
+| 你自己上传到 `books/` 的书 | 版权归原作者所有；仅在本机离线使用，请勿在开源项目中分发受版权保护的内容 |
+
+> 本软件是本地离线工具：书籍只存在你自己的电脑上，项目仓库（`books/` 已 gitignore）不会携带任何书籍内容。
 
 ## Roadmap
 

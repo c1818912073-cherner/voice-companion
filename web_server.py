@@ -164,7 +164,7 @@ def load_script(book_path, deep=False):
         if os.path.exists(script_f):
             try:
                 sd = json.load(open(script_f, encoding="utf-8"))
-                if sd.get("mtime") == mtime:
+                if sd.get("mtime") == mtime and sd.get("v") == ne.ENGINE_VER:
                     lines = sd["lines"]
             except Exception:
                 lines = None
@@ -172,13 +172,14 @@ def load_script(book_path, deep=False):
             text = vc.extract_text(book_path)
             lines = ne.extract_script(text)
             with open(script_f, "w", encoding="utf-8") as f:
-                json.dump({"mtime": mtime, "lines": lines}, f, ensure_ascii=False)
+                json.dump({"v": ne.ENGINE_VER, "mtime": mtime, "lines": lines},
+                          f, ensure_ascii=False)
 
         characters = None
         if os.path.exists(chars_f):
             try:
                 cd = json.load(open(chars_f, encoding="utf-8"))
-                if cd.get("mtime") == mtime:
+                if cd.get("mtime") == mtime and cd.get("v") == ne.ENGINE_VER:
                     characters = cd.get("characters") or []
             except Exception:
                 characters = None
@@ -187,7 +188,8 @@ def load_script(book_path, deep=False):
                 text = vc.extract_text(book_path)
             characters = ne.build_characters(text, lines)
             with open(chars_f, "w", encoding="utf-8") as f:
-                json.dump({"mtime": mtime, "characters": characters}, f, ensure_ascii=False)
+                json.dump({"v": ne.ENGINE_VER, "mtime": mtime, "characters": characters},
+                          f, ensure_ascii=False)
         if characters is None:
             characters = []
     return lines, characters
