@@ -514,6 +514,14 @@ class Handler(BaseHTTPRequestHandler):
                     return self._err("text 为空")
                 self._json({"reply": vc.think(text)})
 
+            elif u.path == "/api/script":
+                # 把一段文本切成"说话人+台词"（用于对话回复的分角色朗读）
+                d = json.loads(self._body())
+                text = str(d.get("text") or "").strip()
+                if not text:
+                    return self._err("text 为空")
+                self._json({"lines": ne.extract_script(text)})
+
             elif u.path == "/api/book/analyze":
                 d = json.loads(self._body())
                 p = safe_book_path(d["path"])

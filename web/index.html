@@ -205,6 +205,14 @@ main{position:relative;z-index:1;flex:1;padding:4px 30px 46px;max-width:1140px;w
   border-bottom-left-radius:6px}
 .msg.bot::before{content:'';position:absolute;left:-1px;top:14px;bottom:14px;width:3px;
   border-radius:3px;background:var(--grad);opacity:.7}
+/* 分角色朗读气泡 */
+.msg.bot.novel{max-width:86%;padding:9px 11px}
+.cline{display:flex;gap:9px;padding:5px 8px;border-radius:9px;line-height:1.65;transition:background .2s}
+.cline .spk{flex-shrink:0;font-size:11px;padding:2px 9px;border-radius:99px;margin-top:3px;
+  white-space:nowrap;background:rgba(255,255,255,.07);color:var(--dim)}
+.cline .spk.nar{background:rgba(148,163,184,.14)}
+.cline .spk.chr{background:rgba(139,124,248,.2);color:#cdc4ff}
+.cline.cur{background:linear-gradient(90deg,rgba(139,124,248,.16),rgba(94,200,248,.05))}
 .typing{display:inline-flex;gap:4px;padding:4px 2px}
 .typing i{width:6px;height:6px;border-radius:50%;background:var(--dim);animation:ty 1.2s infinite}
 .typing i:nth-child(2){animation-delay:.2s}.typing i:nth-child(3){animation-delay:.4s}
@@ -336,7 +344,7 @@ footer a:hover{color:var(--text)}
       <div><div class="pn">小伴</div><div class="ps">本地在线，随叫随到</div></div>
     </div>
     <div class="msgs" id="msgs">
-      <div class="msg bot">你好，点麦克风或打字跟我聊天吧。</div>
+      <div class="msg bot">你好，点麦克风或打字跟我聊天吧。让我「讲个带对话的小故事」，我会用不同的声音读给你听。</div>
     </div>
     <div class="chatbar">
       <button class="mic" id="mic" title="点击开始录音，再点结束">🎤</button>
@@ -728,6 +736,44 @@ function addMsg(who,text){
   box.appendChild(m);box.scrollTop=box.scrollHeight;return m;
 }
 function chatStatus(t){$('chatStatus').textContent=t;}
+
+/* 对话分角色朗读：给每个说话人分配稳定且不重复的音色 */
+function chatVoiceFor(speaker, used){
+  if(speaker==='旁白' || !STATE.voices.length) return STATE.currentId;
+  if(used[speaker]) return used[speaker];
+  const taken=new Set(Object.values(used));
+  const pool=STATE.voices.filter(v=>v.id!==STATE.currentId && !taken.has(v.id));
+  if(!pool.length) return STATE.currentId;
+  let h=0; for(const c of speaker) h=(h*31+c.codePointAt(0))>>>0;
+  const pick=pool[h%pool.length];
+  used[speaker]=pick.id;
+  return pick.id;
+}
+function renderNovelBubble(t, lines){
+  t.classList.add('novel');
+  t.innerHTML='';
+  lines.forEach(ln=>{
+    const row=document.createElement('div');
+    row.className='cline';
+    const cls = ln.s==='旁白' ? 'nar' : 'chr';
+    row.innerHTML=`<span class="spk ${cls}">${esc(ln.s)}</span><span style="flex:1">${esc(ln.t)}</span>`;
+    t.appendChild(row);
+  });
+}
+function playSeq(t, urls, onEnd){
+  const rows=t.querySelectorAll('.cline');
+  let i=0;
+  const next=()=>{
+    if(i>0 && rows[i-1]) rows[i-1].classList.remove('cur');
+    if(i>=urls.length){onEnd();return;}
+    if(rows[i]) rows[i].classList.add('cur');
+    chatStatus(`🔊 分角色朗读中 · ${i+1}/${urls.length}`);
+    const a=new Audio(urls[i]);
+    a.onended=()=>{URL.revokeObjectURL(urls[i]);i++;next();};
+    a.play();
+  };
+  next();
+}
 async function sendChat(text){
   if(busy)return;busy=true;
   const t=addMsg('bot','');t.innerHTML='<span class="typing"><i></i><i></i><i></i></span>';
@@ -736,10 +782,30 @@ async function sendChat(text){
     const r=await api('/api/chat',{method:'POST',headers:{'Content-Type':'application/json'},
       body:JSON.stringify({text})});
     const d=await r.json();
-    t.textContent=d.reply||'…';
+    const reply=d.reply||'…';
+    // 回复里有人物对话 → 分角色朗读
+    try{
+      const s=await (await api('/api/script',{method:'POST',
+        headers:{'Content-Type':'application/json'},
+        body:JSON.stringify({text:reply})})).json();
+      const lines=(s.lines||[]).filter(l=>l.t && l.t.trim());
+      if(lines.length>1 && new Set(lines.map(l=>l.s)).size>1){
+        renderNovelBubble(t, lines);
+        chatStatus('合成语音…');
+        const used={};
+        const urls=await Promise.all(lines.map(ln=>
+          api('/api/tts',{method:'POST',headers:{'Content-Type':'application/json'},
+            body:JSON.stringify({text:ln.t, voiceId:chatVoiceFor(ln.s,used)})})
+            .then(r=>r.blob()).then(b=>URL.createObjectURL(b))));
+        playSeq(t, urls, ()=>{chatStatus('');busy=false;
+          if($('contMode').checked&&$('page-chat').classList.contains('active'))startRec();});
+        return;
+      }
+    }catch(e){/* 切分失败则回落单音色 */}
+    t.textContent=reply;
     chatStatus('合成语音…');
     const ar=await api('/api/tts',{method:'POST',headers:{'Content-Type':'application/json'},
-      body:JSON.stringify({text:d.reply})});
+      body:JSON.stringify({text:reply})});
     const url=URL.createObjectURL(await ar.blob());
     const a=new Audio(url);
     a.onended=()=>{URL.revokeObjectURL(url);chatStatus('');busy=false;
