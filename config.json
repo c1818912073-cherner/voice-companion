@@ -1,0 +1,20 @@
+{
+  "base_url": "http://127.0.0.1:8880/v1",
+  "asr_model": "Qwen3-ASR-1.7B-bf16",
+  "tts_model": "Qwen3-TTS-12Hz-1.7B-VoiceDesign-bf16",
+  "chat_model": "Qwythos-9B-Claude-Mythos-5-1M-mxfp4-mlx",
+  "voice": {
+    "name": "温柔女声",
+    "instructions": "A gentle, warm young woman's voice, soft and calm, natural conversational pace",
+    "speed": 1.0
+  },
+  "system_prompt": "你是用户的语音伴侣，名叫小伴，性格温暖、有点俏皮。你的回复会被直接朗读出来，所以必须口语化、自然，每次不超过三句话，不要用任何符号列表、代码、英文单词（除非必要），不要输出 emoji。",
+  "max_history": 20,
+  "max_reply_chars": 200,
+  "segment_max_chars": 280,
+  "prefetch_segments": 3,
+  "silence_threshold_pct": 2.5,
+  "silence_stop_seconds": 1.4,
+  "record_max_seconds": 30,
+  "asr_language": "zh"
+}

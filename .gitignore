@@ -1,0 +1,16 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+
+# 用户数据（书籍 / 进度 / 音色库 / 合成缓存）
+books/*
+!books/.gitkeep
+voices.json
+
+# 系统与编辑器
+.DS_Store
+.idea/
+.vscode/
+*.swp
