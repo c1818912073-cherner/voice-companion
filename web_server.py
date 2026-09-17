@@ -428,9 +428,10 @@ class Handler(BaseHTTPRequestHandler):
     def do_POST(self):
         u = urlparse(self.path)
         q = parse_qs(u.query)
+        body = self._body()  # 统一消费请求体，避免 keep-alive 残留与下一请求粘连
         try:
             if u.path == "/api/voices/save":
-                d = json.loads(self._body())
+                d = json.loads(body)
                 name = str(d.get("name") or "").strip()[:30]
                 instructions = str(d.get("instructions") or "").strip()
                 if not name or not instructions:
@@ -455,7 +456,7 @@ class Handler(BaseHTTPRequestHandler):
                 self._json({"ok": True, "voice": entry, "currentId": lib["current"]})
 
             elif u.path == "/api/voices/delete":
-                d = json.loads(self._body())
+                d = json.loads(body)
                 lib = load_library()
                 vid = d.get("id")
                 if any(v["id"] == vid and v["id"] in {s["id"] for s in SEED_VOICES}
@@ -468,7 +469,7 @@ class Handler(BaseHTTPRequestHandler):
                 self._json({"ok": True})
 
             elif u.path == "/api/voices/current":
-                d = json.loads(self._body())
+                d = json.loads(body)
                 lib = load_library()
                 if not voice_by_id(d.get("id")):
                     return self._err("音色不存在")
@@ -477,7 +478,7 @@ class Handler(BaseHTTPRequestHandler):
                 self._json({"ok": True, "voice": current_voice()})
 
             elif u.path == "/api/tts":
-                d = json.loads(self._body())
+                d = json.loads(body)
                 text = str(d.get("text") or "").strip()
                 if not text:
                     return self._err("text 为空")
@@ -490,7 +491,7 @@ class Handler(BaseHTTPRequestHandler):
                 self._wav(vc.tts_bytes(text, voice=voice))
 
             elif u.path == "/api/asr":
-                data = self._body()
+                data = body
                 if not data:
                     return self._err("空音频")
                 wav = ffmpeg_to_wav(data, self.headers.get("X-Audio-Type", ""))
@@ -506,7 +507,7 @@ class Handler(BaseHTTPRequestHandler):
                         pass
 
             elif u.path == "/api/chat":
-                d = json.loads(self._body())
+                d = json.loads(body)
                 if d.get("reset"):
                     with _chat_lock:
                         vc._history.clear()
@@ -518,14 +519,14 @@ class Handler(BaseHTTPRequestHandler):
 
             elif u.path == "/api/script":
                 # 把一段文本切成"说话人+台词"（用于对话回复的分角色朗读）
-                d = json.loads(self._body())
+                d = json.loads(body)
                 text = str(d.get("text") or "").strip()
                 if not text:
                     return self._err("text 为空")
                 self._json({"lines": ne.extract_script(text)})
 
             elif u.path == "/api/book/analyze":
-                d = json.loads(self._body())
+                d = json.loads(body)
                 p = safe_book_path(d["path"])
                 lines, characters = load_script(p, deep=True)
                 cast = load_cast(p)
@@ -535,14 +536,14 @@ class Handler(BaseHTTPRequestHandler):
                 self._json({"lines": lines, "characters": characters, "cast": cast})
 
             elif u.path == "/api/book/cast":
-                d = json.loads(self._body())
+                d = json.loads(body)
                 p = safe_book_path(d["path"])
                 cast = {str(k): str(v) for k, v in (d.get("cast") or {}).items()}
                 save_cast(p, cast)
                 self._json({"ok": True})
 
             elif u.path == "/api/segment":
-                d = json.loads(self._body())
+                d = json.loads(body)
                 p = safe_book_path(d["path"])
                 idx = int(d["idx"])
                 lines, _ = load_script(p)
@@ -559,7 +560,7 @@ class Handler(BaseHTTPRequestHandler):
                     self._wav(f.read())
 
             elif u.path == "/api/progress":
-                d = json.loads(self._body())
+                d = json.loads(body)
                 p = safe_book_path(d["path"])
                 idx = max(0, int(d["idx"]))
                 lines, _ = load_script(p)
@@ -569,7 +570,7 @@ class Handler(BaseHTTPRequestHandler):
             elif u.path == "/api/books/upload":
                 name = qstr(q, "name", "book.txt")
                 name = os.path.basename(name).strip() or "book.txt"
-                data = self._body()
+                data = body
                 if not data:
                     return self._err("空文件")
                 os.makedirs(vc.BOOKS_DIR, exist_ok=True)
@@ -578,7 +579,7 @@ class Handler(BaseHTTPRequestHandler):
                 self._json({"ok": True, "name": name})
 
             elif u.path == "/api/books/delete":
-                d = json.loads(self._body())
+                d = json.loads(body)
                 p = safe_book_path(d["path"])
                 if os.path.exists(p):
                     os.remove(p)
@@ -593,7 +594,7 @@ class Handler(BaseHTTPRequestHandler):
                 self._json({"ok": True})
 
             elif u.path == "/api/export":
-                d = json.loads(self._body())
+                d = json.loads(body)
                 p = safe_book_path(d["path"])
                 key = os.path.abspath(p)
                 job = _export_jobs.get(key)
