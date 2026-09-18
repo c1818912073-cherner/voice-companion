@@ -745,7 +745,7 @@ document.addEventListener('keydown',e=>{
 });
 
 /* ───────── 对话 ───────── */
-let rec=null, recChunks=[], recStream=null, busy=false;
+let rec=null, recChunks=[], recStream=null, busy=false, recTimer=null;
 async function startRec(){
   try{recStream=await navigator.mediaDevices.getUserMedia({audio:true});}
   catch(e){chatStatus('无法访问麦克风: '+e.message);return;}
@@ -755,12 +755,14 @@ async function startRec(){
   rec.onstop=()=>{recStream.getTracks().forEach(t=>t.stop());
     sendVoice(new Blob(recChunks,{type:mt}));};
   rec.start();
+  clearTimeout(recTimer);
+  recTimer=setTimeout(()=>{if(rec&&rec.state==='recording')stopRec();},30000); // 与终端版一致：30秒自动断句
   $('mic').classList.add('rec');$('mic').textContent='⏹';
   chatStatus('录音中…点击停止');
 }
 function stopRec(){
+  clearTimeout(recTimer);
   if(rec&&rec.state!=='inactive')rec.stop();
-  $('contMode').checked=false;  // 手动停止 = 退出连续对话，防止噪音触发无限循环
   $('mic').classList.remove('rec');$('mic').textContent='🎤';}
 $('mic').onclick=()=>{if(rec&&rec.state==='recording')stopRec();else startRec();};
 async function sendVoice(blob){
