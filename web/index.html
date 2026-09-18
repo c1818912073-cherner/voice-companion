@@ -839,8 +839,11 @@ function renderVoices(){
       <div class="vi">${esc(v.instructions)}</div>`;
     const ops=document.createElement('div');
     ops.className='vops';
-    const mk=(txt,cls,fn)=>{const b=document.createElement('button');
-      b.className='btn ghost sm';b.textContent=txt;b.onclick=e=>{e.stopPropagation();fn();};ops.appendChild(b);};
+    const mk=(txt,fn)=>{const b=document.createElement('button');
+      b.className='btn ghost sm';b.textContent=txt;
+      b.onclick=async e=>{e.stopPropagation();
+        try{await fn();}catch(err){toast('操作失败: '+err.message);}};
+      ops.appendChild(b);};
     mk('▶ 试听',()=>previewVoice(v));
     mk('设为当前',async()=>{
       await api('/api/voices/current',{method:'POST',headers:{'Content-Type':'application/json'},

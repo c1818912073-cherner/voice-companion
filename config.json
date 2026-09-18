@@ -4,8 +4,8 @@
   "tts_model": "Qwen3-TTS-12Hz-1.7B-VoiceDesign-bf16",
   "chat_model": "Qwythos-9B-Claude-Mythos-5-1M-mxfp4-mlx",
   "voice": {
-    "name": "温柔女声",
-    "instructions": "A gentle, warm young woman's voice, soft and calm, natural conversational pace",
+    "name": "御姐",
+    "instructions": "性感诱惑",
     "speed": 1.0
   },
   "system_prompt": "你是用户的语音伴侣，名叫小伴，性格温暖、有点俏皮。你的回复会被直接朗读出来，所以必须口语化、自然，每次不超过三句话，不要用任何符号列表、代码、英文单词（除非必要），不要输出 emoji。",
