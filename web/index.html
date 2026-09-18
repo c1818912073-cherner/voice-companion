@@ -402,6 +402,27 @@ const SPK_COLORS = ['#8b7cf8','#5ec8f8','#4ade9a','#f5b95a','#ff8e6b','#e879a9',
 let STATE = {voices:[], currentId:null, books:[]};
 
 /* ───────── 通用 ───────── */
+/* Chrome 自动播放拦截：点击→等 LLM/TTS 网络往返（数秒）→ play() 会被静默拒绝
+   （无声、无 onended → 连续对话断链）。方案：任何手势里先激活一个占位
+   audio（play 静音 wav），被激活过的元素之后换 src 播放不再受限。 */
+let warmAudio = null;
+document.addEventListener('pointerdown', () => {
+  if (warmAudio) return;
+  try {
+    warmAudio = new Audio();
+    warmAudio.src = 'data:audio/wav;base64,UklGRiQAAABXQVZFZm10IBAAAAABAAEAQB8AAIA+AAACABAAZGF0YQAAAAA=';
+    warmAudio.volume = 0.01;
+    const p = warmAudio.play();
+    if (p) p.catch(() => {});
+  } catch (e) {}
+}, true);
+function playAudio(url){
+  const a = warmAudio || new Audio();  // 复用已激活元素，绕过 autoplay 限制
+  warmAudio = null;                    // 用过即弃，下次手势重新暖机
+  a.volume = 1;
+  a.src = url;
+  return a;
+}
 async function api(path, opts){
   const r = await fetch(path, opts);
   if(!r.ok){ let m=r.statusText; try{m=(await r.json()).error||m}catch(e){} throw new Error(m); }
@@ -627,9 +648,11 @@ async function playCur(force){
   $('readStatus').textContent='合成中…';
   try{
     const url=await segUrl(R.idx);
-    R.audio=new Audio(url); bindAudio(R.audio);
+    R.audio=playAudio(url); bindAudio(R.audio);
     R.playing=true;setPlayIcon();markSeg();updateBar();
-    R.audio.play();
+    R.audio.play().catch(()=>{
+      R.playing=false;setPlayIcon();
+      $('readStatus').textContent='播放被浏览器拦截，请先点一下页面任意位置，再按播放';});
     $('readStatus').textContent=`正在朗读 · 「${R.lines[R.idx].s}」`;
   }catch(e){$('readStatus').textContent='播放失败: '+e.message;}
 }
@@ -787,9 +810,9 @@ function playSeq(t, urls, onEnd){
     if(i>=urls.length){onEnd();return;}
     if(rows[i]) rows[i].classList.add('cur');
     chatStatus(`🔊 分角色朗读中 · ${i+1}/${urls.length}`);
-    const a=new Audio(urls[i]);
+    const a=playAudio(urls[i]);
     a.onended=()=>{URL.revokeObjectURL(urls[i]);i++;next();};
-    a.play();
+    a.play().catch(()=>{chatStatus('播放被浏览器拦截，请点一下页面任意位置');onEnd();});
   };
   next();
 }
@@ -826,10 +849,11 @@ async function sendChat(text){
     const ar=await api('/api/tts',{method:'POST',headers:{'Content-Type':'application/json'},
       body:JSON.stringify({text:reply})});
     const url=URL.createObjectURL(await ar.blob());
-    const a=new Audio(url);
+    const a=playAudio(url);
     a.onended=()=>{URL.revokeObjectURL(url);chatStatus('');busy=false;
       if($('contMode').checked&&$('page-chat').classList.contains('active'))startRec();};
-    chatStatus('🔊 播放中…');a.play();
+    chatStatus('🔊 播放中…');
+    a.play().catch(()=>{chatStatus('播放被浏览器拦截，请点一下页面任意位置后再发送');busy=false;});
   }catch(e){chatStatus('出错: '+e.message);busy=false;}
 }
 $('sendBtn').onclick=()=>{const v=$('chatInput').value.trim();if(!v||busy)return;
