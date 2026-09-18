@@ -177,7 +177,7 @@ def extract_script(text):
             else:
                 lines.append({"s": "旁白", "t": stripped})
     lines = _drop_rare_speakers(_merge_and_split(lines))
-    return _merge_name_fragments(_merge_and_split(lines))
+    return _merge_name_fragments(lines)  # 只归并角色名，不再合并相邻行
 
 
 def _drop_rare_speakers(lines, min_lines=3):
