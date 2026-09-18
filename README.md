@@ -91,7 +91,7 @@
 **2. 启动语音伴侣**
 
 ```bash
-git clone <你的仓库地址> && cd voice-companion
+git clone https://github.com/c1818912073-cherner/voice-companion.git && cd voice-companion
 python3 web_server.py            # 打开 http://127.0.0.1:8890
 ```
 
