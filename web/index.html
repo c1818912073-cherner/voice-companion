@@ -500,16 +500,26 @@ async function openBook(name, savedIdx=0){
 
 function renderSeglist(){
   const sl=$('seglist'); sl.innerHTML='';
-  R.lines.forEach((ln,i)=>{
-    const el=document.createElement('div');
-    el.className='seg';
-    const cls = ln.s==='旁白'?'nar':'chr';
-    el.innerHTML=`<span class="spk ${cls}">${esc(ln.s)}</span><span style="flex:1">${esc(ln.t)}</span>`;
-    el.onclick=()=>{R.idx=i; playCur(true);};
-    sl.appendChild(el);
-  });
-  markSeg();
+  const total=R.lines.length, CHUNK=2000;
+  let i=0;
+  const render=()=>{
+    const end=Math.min(i+CHUNK,total);
+    let html='';
+    for(;i<end;i++){
+      const ln=R.lines[i];
+      const cls = ln.s==='旁白'?'nar':'chr';
+      html+=`<div class="seg" data-i="${i}"><span class="spk ${cls}">${esc(ln.s)}</span><span style="flex:1">${esc(ln.t)}</span></div>`;
+    }
+    sl.insertAdjacentHTML('beforeend',html);
+    if(i<total) setTimeout(render,0);
+    else markSeg();
+  };
+  render();
 }
+$('seglist').onclick=e=>{
+  const seg=e.target.closest('.seg');
+  if(seg){ R.idx=+seg.dataset.i; playCur(true); }
+};
 
 function renderCast(showAll=false){
   const panel=$('castPanel'), rows=$('castRows');

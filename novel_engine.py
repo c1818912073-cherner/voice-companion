@@ -26,7 +26,10 @@ ACTIONS = (
     "小声|柔声|朗声|突然|忽然|想[了起]?|沉[了着]?|叹[了口]?气?|颔首|"
     "微微一?笑|淡淡一?笑|轻轻一?笑|灿然一?笑|哈哈一?笑|冷冷一?笑|苦笑|轻笑|笑|"
     "[咬抿][了]?.{0,4}|看[了看]?.{0,4}|摸[了着]?.{0,4}|揉[了着]?.{0,4}|高兴|兴奋|激动|认真|严肃|坚定|温柔|无奈|惊讶|好奇|得意|神秘|感慨|平静|冷静|欣慰|疲惫|尴尬|恭敬|不满|担忧|愤怒|欣喜|期待|冷冷|憨厚|慈祥|挠[了挠]?.{0,4}|抓[了抓]?.{0,4}|"
-    "忙|連|連聲"
+    "忙|連|連聲|"
+    "不动声色|不置可否|面无表情|面无表情地|毫不犹豫|轻描淡写|若无其事|慢条斯理|不紧不慢|"
+    "意味深长|似笑非笑|喃喃|淡然|坦然|坦然自若|心平气和|慢吞吞|"
+    "心中一?[凛动惊叹]|心中大[惊喜]|轻[吐叹哼]|摇首|微然一?笑|微微颔首"
 )
 NAME = r"[\u4e00-\u9fa5A-Za-z0-9·]{1,12}"
 
@@ -64,7 +67,10 @@ _GENERIC = {"有人", "男人", "女人", "众人", "孩子", "孩童", "大家"
             "因", "笑", "說", "说", "乃", "遂", "便", "便說",
             "叫", "叫聲", "道", "大",
             "問", "答", "曰", "答云", "又", "連說", "異史氏", "女", "生", "自言",
-            "忙", "連"}
+            "忙", "連",
+            "老", "老者", "老妪", "老道", "青年", "妇人", "女子", "男子",
+            "少女", "少年", "儒生", "开口", "一", "淡淡",
+            "中年", "此女", "这", "那名", "黑脸", "银发老者"}
 # 中途包含人称代词的多半是动作短语误抓（"揪他耳朵"）
 _PRON_IN = set("他她它你我")
 
@@ -170,7 +176,8 @@ def extract_script(text):
                     pending = _norm_speaker(pm.group(1))
             else:
                 lines.append({"s": "旁白", "t": stripped})
-    return _drop_rare_speakers(_merge_and_split(lines))
+    lines = _drop_rare_speakers(_merge_and_split(lines))
+    return _merge_name_fragments(_merge_and_split(lines))
 
 
 def _drop_rare_speakers(lines, min_lines=3):
@@ -185,6 +192,36 @@ def _drop_rare_speakers(lines, min_lines=3):
             counts[ln["s"]] = counts.get(ln["s"], 0) + 1
     return [{"s": "旁白" if counts.get(ln["s"], 0) < min_lines else ln["s"],
              "t": ln["t"]} for ln in lines]
+
+
+# 常见截断修复：单字/残名 → 完整角色名
+_ALIAS = {"蟹": "蟹道人"}
+
+
+def _merge_name_fragments(lines):
+    """把"韩立微/韩立神色"这类 高频角色名+修饰碎片 归并回该角色。
+
+    规则切分对"韩立微微一笑，说道"难免漏吸修饰词，NAME 被回溯啃掉一截；
+    若某说话人以高频角色名开头且剩余部分很短，则认为是同一人的残名。
+    """
+    counts = {}
+    for ln in lines:
+        if ln["s"] != "旁白":
+            counts[ln["s"]] = counts.get(ln["s"], 0) + 1
+    base = sorted((n for n, cnt in counts.items()
+                   if cnt >= 8 and 2 <= len(n) <= 4), key=len)
+
+    def norm(s):
+        if s in _ALIAS:
+            return _ALIAS[s]
+        if s == "旁白":
+            return s
+        for b in base:
+            if s != b and s.startswith(b) and len(s) - len(b) <= 6:
+                return b
+        return s
+
+    return [{"s": norm(ln["s"]), "t": ln["t"]} for ln in lines]
 
 
 def _merge_and_split(lines):
