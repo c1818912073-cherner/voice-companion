@@ -28,6 +28,10 @@ sys.path.insert(0, HERE)
 import voice_companion as vc   # noqa: E402
 import novel_engine as ne      # noqa: E402
 
+# 服务可能从任意环境（GUI/脚本/IDE）启动，PATH 未必含 brew；
+# 优先 PATH 查找，回退 macOS Homebrew 标准路径
+FFMPEG = shutil.which("ffmpeg") or "/opt/homebrew/bin/ffmpeg"
+
 WEB_DIR = os.path.join(HERE, "web")
 PORT = int(sys.argv[1]) if len(sys.argv) > 1 else 8890
 VOICES_FILE = os.path.join(HERE, "voices.json")
@@ -272,7 +276,7 @@ def export_worker(book_path, job):
             for w in wav_paths:
                 f.write(f"file '{w}'\n")
         r = subprocess.run(
-            ["ffmpeg", "-y", "-f", "concat", "-safe", "0", "-i", lst,
+            [FFMPEG, "-y", "-f", "concat", "-safe", "0", "-i", lst,
              "-b:a", "96k", out],
             capture_output=True, timeout=600,
         )
@@ -297,7 +301,7 @@ def ffmpeg_to_wav(data, hint_type):
         with open(src, "wb") as f:
             f.write(data)
         r = subprocess.run(
-            ["ffmpeg", "-y", "-i", src, "-ar", "16000", "-ac", "1", dst],
+            [FFMPEG, "-y", "-i", src, "-ar", "16000", "-ac", "1", dst],
             capture_output=True, timeout=60,
         )
         if r.returncode != 0 or not os.path.exists(dst):
@@ -623,9 +627,25 @@ def qstr(q, key, default=""):
 
 
 def main():
+    import socket
     os.makedirs(vc.BOOKS_DIR, exist_ok=True)
     load_library()
-    srv = ThreadingHTTPServer(("127.0.0.1", PORT), Handler)
+
+    class DualStackServer(ThreadingHTTPServer):
+        """同时接受 IPv4(127.0.0.1) 与 IPv6(::1)，localhost 两种解析都能打开。"""
+        address_family = socket.AF_INET6
+
+        def server_bind(self):
+            try:
+                self.socket.setsockopt(socket.IPPROTO_IPV6, socket.IPV6_V6ONLY, 0)
+            except OSError:
+                pass
+            super().server_bind()
+
+    try:
+        srv = DualStackServer(("::", PORT), Handler)
+    except OSError:
+        srv = ThreadingHTTPServer(("127.0.0.1", PORT), Handler)  # 无 IPv6 时回退
     print(f"语音伴侣 Web v2: http://127.0.0.1:{PORT}  (Ctrl+C 停止)")
     try:
         srv.serve_forever()
