@@ -353,9 +353,10 @@ footer a:hover{color:var(--text)}
     </div>
     <div class="chatbar">
       <button class="mic" id="mic" title="点击开始录音，再点结束">🎤</button>
-      <input type="text" id="chatInput" placeholder="说话或输入文字…（Enter 发送）">
+      <input type="text" id="chatInput" placeholder="说话或输入文字…（Enter 发送；开剧情连播后输入剧情方向）">
       <button class="btn" id="sendBtn">发送</button>
       <label class="switch"><input type="checkbox" id="contMode">连续对话</label>
+      <label class="switch"><input type="checkbox" id="storyMode">🎬 剧情连播</label>
       <button class="btn ghost sm" id="resetChat" title="清空对话记忆">🧹</button>
     </div>
     <div class="status" id="chatStatus"></div>
@@ -804,17 +805,30 @@ function renderNovelBubble(t, lines){
     t.appendChild(row);
   });
 }
-function playSeq(t, urls, onEnd){
+/* 逐行懒合成朗读：播第 i 行时后台合成第 i+1 行，首行无需等全量合成 */
+function speakLines(t, lines, used, onEnd){
+  const n=lines.length, cache={};
+  const getUrl=i=>{
+    if(i>=n) return Promise.resolve(null);
+    if(!cache[i]) cache[i]=api('/api/tts',{method:'POST',headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({text:lines[i].t, voiceId:chatVoiceFor(lines[i].s,used)})})
+      .then(r=>r.blob()).then(b=>URL.createObjectURL(b));
+    return cache[i];
+  };
+  getUrl(0).catch(()=>{});getUrl(1).catch(()=>{});
   const rows=t.querySelectorAll('.cline');
   let i=0;
   const next=()=>{
     if(i>0 && rows[i-1]) rows[i-1].classList.remove('cur');
-    if(i>=urls.length){onEnd();return;}
+    if(i>=n){onEnd();return;}
     if(rows[i]) rows[i].classList.add('cur');
-    chatStatus(`🔊 分角色朗读中 · ${i+1}/${urls.length}`);
-    const a=playAudio(urls[i]);
-    a.onended=()=>{URL.revokeObjectURL(urls[i]);i++;next();};
-    a.play().catch(()=>{chatStatus('播放被浏览器拦截，请点一下页面任意位置');onEnd();});
+    chatStatus(`🔊 分角色朗读中 · ${i+1}/${n}`);
+    getUrl(i).then(url=>{
+      getUrl(i+1).catch(()=>{});
+      const a=playAudio(url);
+      a.onended=()=>{i++;next();};
+      a.play().catch(()=>{chatStatus('播放被浏览器拦截，请点一下页面任意位置');onEnd();});
+    }).catch(()=>{chatStatus('语音合成失败');onEnd();});
   };
   next();
 }
@@ -835,13 +849,7 @@ async function sendChat(text){
       const lines=(s.lines||[]).filter(l=>l.t && l.t.trim());
       if(lines.length>1 && new Set(lines.map(l=>l.s)).size>1){
         renderNovelBubble(t, lines);
-        chatStatus('合成语音…');
-        const used={};
-        const urls=await Promise.all(lines.map(ln=>
-          api('/api/tts',{method:'POST',headers:{'Content-Type':'application/json'},
-            body:JSON.stringify({text:ln.t, voiceId:chatVoiceFor(ln.s,used)})})
-            .then(r=>r.blob()).then(b=>URL.createObjectURL(b))));
-        playSeq(t, urls, ()=>{chatStatus('');busy=false;
+        speakLines(t, lines, {}, ()=>{chatStatus('');busy=false;
           if($('contMode').checked&&$('page-chat').classList.contains('active'))startRec();});
         return;
       }
@@ -859,11 +867,75 @@ async function sendChat(text){
   }catch(e){chatStatus('出错: '+e.message);busy=false;}
 }
 $('sendBtn').onclick=()=>{const v=$('chatInput').value.trim();if(!v||busy)return;
-  $('chatInput').value='';addMsg('user',v);sendChat(v);};
+  $('chatInput').value='';
+  if(storyOn){                       // 剧情模式：输入作为剧情方向
+    if(storyBusy){toast('剧情创作中，稍等片刻');return;}
+    addMsg('user',v);storyNext(v);return;
+  }
+  addMsg('user',v);sendChat(v);};
 $('chatInput').onkeydown=e=>{if(e.key==='Enter')$('sendBtn').click();};
 $('resetChat').onclick=async()=>{await api('/api/chat',{method:'POST',
   headers:{'Content-Type':'application/json'},body:JSON.stringify({reset:true})});
-  $('msgs').innerHTML='<div class="msg bot">记忆已清空，重新开始聊吧。</div>';};
+  $('msgs').innerHTML='<div class="msg bot">记忆已清空，重新开始聊吧。</div>';
+  storyOn=false;$('storyMode').checked=false;storyPrev='';storySeg=0;};
+
+/* ───────── 剧情连播：生成有剧情的小说片段，分角色朗读，播完自动续写 ───────── */
+let storyOn=false, storyPrev="", storyBusy=false, storySeg=0;
+async function storyNext(brief){
+  if(!storyOn||storyBusy)return;
+  storyBusy=true;storySeg++;
+  const t=addMsg('bot','');t.innerHTML='<span class="typing"><i></i><i></i><i></i></span>';
+  chatStatus(`🎬 第 ${storySeg} 段剧情创作中…`);
+  try{
+    const r=await api('/api/chat/story',{method:'POST',headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({brief, prev:storyPrev})});
+    const d=await r.json();
+    const reply=d.reply||'……';
+    storyPrev=reply;
+    /* 优先解析 LLM 的【角色】逐行格式（角色名零歧义）；失败回落规则切分 */
+    let lines=null;
+    const fmt=reply.split('\n').map(l=>l.trim()).filter(l=>{
+      const m=l.match(/^【(.+?)】(.+)$/);return m&&m[2].trim();
+    }).map(l=>{const m=l.match(/^【(.+?)】(.+)$/);return {s:m[1].trim(),t:m[2].trim()};});
+    if(fmt.length>1 && new Set(fmt.map(l=>l.s)).size>1) lines=fmt;
+    try{
+      if(!lines){
+        const s=await (await api('/api/script',{method:'POST',headers:{'Content-Type':'application/json'},
+          body:JSON.stringify({text:reply})})).json();
+        const cand=(s.lines||[]).filter(l=>l.t&&l.t.trim());
+        if(cand.length>1 && new Set(cand.map(l=>l.s)).size>1) lines=cand;
+      }
+    }catch(e){/* 回落单音色 */}
+    if(lines){
+        renderNovelBubble(t,lines);
+        speakLines(t,lines,{},()=>{chatStatus('');storyBusy=false;
+          if(storyOn&&$('page-chat').classList.contains('active'))storyNext('');});
+        return;
+    }
+    t.textContent=reply;
+    chatStatus('合成语音…');
+    const ar=await api('/api/tts',{method:'POST',headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({text:reply})});
+    const url=URL.createObjectURL(await ar.blob());
+    const a=playAudio(url);
+    a.onended=()=>{chatStatus('');storyBusy=false;
+      if(storyOn&&$('page-chat').classList.contains('active'))storyNext('');};
+    a.play().catch(()=>{chatStatus('播放被浏览器拦截，请点一下页面');storyBusy=false;});
+  }catch(e){chatStatus('剧情创作失败: '+e.message);storyBusy=false;}
+}
+$('storyMode').onchange=()=>{
+  storyOn=$('storyMode').checked;
+  if(storyOn){
+    $('contMode').checked=false;   // 与连续对话互斥
+    const v=$('chatInput').value.trim();
+    $('chatInput').value='';
+    storyPrev='';storySeg=0;
+    addMsg('user',v||'给我演一段剧情');
+    storyNext(v);
+  }else{
+    chatStatus('剧情连播已停，本段播完即止');
+  }
+};
 
 /* ───────── 音色库 ───────── */
 let editing=null; // null=新建, {id}=编辑

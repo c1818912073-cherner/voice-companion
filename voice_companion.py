@@ -185,13 +185,23 @@ def transcribe(path):
 _history = []
 
 
-def think(user_text):
-    _history.append({"role": "user", "content": user_text})
-    messages = [{"role": "system", "content": CFG["system_prompt"]}] + _history[-CFG["max_history"]:]
+def think(user_text, system=None, history=None, max_tokens=None, max_chars=None,
+          keep_lines=False):
+    """对话生成。system/history/max_tokens/max_chars 可覆盖（剧情模式等专用场景），
+    默认走闲聊配置与全局记忆；传入 history 时不读写全局记忆。
+    keep_lines=True 时保留换行（结构化输出用），否则压成单行。"""
+    if history is None:
+        _history.append({"role": "user", "content": user_text})
+        history = _history[-CFG["max_history"]:]
+        own = True
+    else:  # 外部历史：本轮输入追加在末尾，不读写全局记忆
+        history = list(history) + [{"role": "user", "content": user_text}]
+        own = False
+    messages = [{"role": "system", "content": system or CFG["system_prompt"]}] + history
     payload = {
         "model": CFG["chat_model"],
         "messages": messages,
-        "max_tokens": 280,
+        "max_tokens": max_tokens or 280,
         "temperature": 0.7,
         "chat_template_kwargs": {"enable_thinking": False},
         "tool_choice": "none",
@@ -201,12 +211,17 @@ def think(user_text):
     msg = json.loads(raw.decode("utf-8"))["choices"][0]["message"]
     reply = (msg.get("content") or "").strip()
     reply = re.sub(r"<think>.*?</think>", "", reply, flags=re.S).strip()
-    reply = re.sub(r"[*#`_~>|]+", "", reply)
+    reply = re.sub(r"[*#`_~>]+", "", reply)
     reply = re.sub(r"[\U0001F000-\U0001FAFF\u2600-\u27BF\uFE0F]", "", reply)
-    reply = re.sub(r"\s+", " ", reply).strip()
-    if len(reply) > CFG["max_reply_chars"]:
-        reply = reply[: CFG["max_reply_chars"]] + "……先说这些。"
-    _history.append({"role": "assistant", "content": reply})
+    if keep_lines:
+        reply = re.sub(r"[ \t]+", " ", reply).strip()
+    else:
+        reply = re.sub(r"\s+", " ", reply).strip()
+    limit = max_chars or CFG["max_reply_chars"]
+    if len(reply) > limit:
+        reply = reply[:limit] + "……先说这些。"
+    if own:
+        _history.append({"role": "assistant", "content": reply})
     return reply
 
 

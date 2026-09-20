@@ -521,6 +521,37 @@ class Handler(BaseHTTPRequestHandler):
                     return self._err("text 为空")
                 self._json({"reply": vc.think(text)})
 
+            elif u.path == "/api/chat/story":
+                # 剧情连播：生成/续写有剧情的小说片段（不污染闲聊记忆）
+                d = json.loads(body)
+                brief = str(d.get("brief") or "").strip()[:100]
+                prev = str(d.get("prev") or "").strip()
+                if prev:
+                    user = f"上一段剧情：\n{prev[:800]}\n\n请承接这段剧情继续写下一部分，段尾留悬念。"
+                    if brief:
+                        user += f"\n注意融入这个方向：{brief}"
+                else:
+                    user = ((brief + "\n\n") if brief else "") + \
+                        "请创作第一段小说剧情，人物出场要自然，段尾留一个悬念钩子。"
+                system = (
+                    "你是一位广播剧编剧，正在为用户即兴创作一部剧情连贯的原创小说连载。"
+                    "人物与背景必须原创，不要使用任何已有知名小说或影视的角色名。"
+                    "每段 400~600 字，固定 2~4 个人物，以对话和动作推进情节；"
+                    "每段必须有明确的剧情推进（冲突、转折或揭秘），段尾留悬念；"
+                    "语言口语化、画面感强，台词用「」引号；"
+                    "严格按以下格式逐行输出，不要输出任何其他内容：\n"
+                    "【旁白】环境与动作叙述\n"
+                    "【人物名】台词或带提示语的台词，如：【沈青禾】低声道：「这雨下得蹊跷。」\n"
+                    "叙述和台词交错成行，人物名全文保持一致。"
+                )
+                reply = vc.think(user, system=system, history=[], max_tokens=900,
+                                 max_chars=1000, keep_lines=True)
+                if not reply:  # 9B 模型偶发空输出，换措辞重试一次
+                    reply = vc.think("请直接输出下一段，保持【角色】逐行格式。", system=system,
+                                     history=[{"role": "user", "content": user}],
+                                     max_tokens=900, max_chars=1000, keep_lines=True)
+                self._json({"reply": reply})
+
             elif u.path == "/api/script":
                 # 把一段文本切成"说话人+台词"（用于对话回复的分角色朗读）
                 d = json.loads(body)
