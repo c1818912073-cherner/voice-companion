@@ -524,15 +524,17 @@ class Handler(BaseHTTPRequestHandler):
             elif u.path == "/api/chat/story":
                 # 剧情连播：生成/续写有剧情的小说片段（不污染闲聊记忆）
                 d = json.loads(body)
-                brief = str(d.get("brief") or "").strip()[:100]
+                brief = str(d.get("brief") or "").strip()[:200]  # 全剧设定/要求，全程生效
                 prev = str(d.get("prev") or "").strip()
                 if prev:
                     user = f"上一段剧情：\n{prev[:800]}\n\n请承接这段剧情继续写下一部分，段尾留悬念。"
                     if brief:
-                        user += f"\n注意融入这个方向：{brief}"
+                        user += f"\n必须始终遵守以下设定与要求（与上文冲突时以设定为准）：{brief}"
                 else:
                     user = ((brief + "\n\n") if brief else "") + \
                         "请创作第一段小说剧情，人物出场要自然，段尾留一个悬念钩子。"
+                    if brief:
+                        user += "\n以上设定贯穿全剧，后续每段都必须遵守。"
                 system = (
                     "你是一位广播剧编剧，正在为用户即兴创作一部剧情连贯的原创小说连载。"
                     "人物与背景必须原创，不要使用任何已有知名小说或影视的角色名。"

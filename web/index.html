@@ -353,7 +353,7 @@ footer a:hover{color:var(--text)}
     </div>
     <div class="chatbar">
       <button class="mic" id="mic" title="点击开始录音，再点结束">🎤</button>
-      <input type="text" id="chatInput" placeholder="说话或输入文字…（Enter 发送；开剧情连播后输入剧情方向）">
+      <input type="text" id="chatInput" placeholder="说话或输入文字…（剧情连播模式下，输入 = 设定：世界观/人物/风格，全程生效）">
       <button class="btn" id="sendBtn">发送</button>
       <label class="switch"><input type="checkbox" id="contMode">连续对话</label>
       <label class="switch"><input type="checkbox" id="storyMode">🎬 剧情连播</label>
@@ -868,27 +868,30 @@ async function sendChat(text){
 }
 $('sendBtn').onclick=()=>{const v=$('chatInput').value.trim();if(!v||busy)return;
   $('chatInput').value='';
-  if(storyOn){                       // 剧情模式：输入作为剧情方向
+  if(storyOn){                       // 剧情模式：输入 = 更新全剧设定，下一段生效
     if(storyBusy){toast('剧情创作中，稍等片刻');return;}
-    addMsg('user',v);storyNext(v);return;
+    storySetting=v;
+    addMsg('user','【设定】'+v);
+    toast('设定已更新，下一段生效');
+    return;
   }
   addMsg('user',v);sendChat(v);};
 $('chatInput').onkeydown=e=>{if(e.key==='Enter')$('sendBtn').click();};
 $('resetChat').onclick=async()=>{await api('/api/chat',{method:'POST',
   headers:{'Content-Type':'application/json'},body:JSON.stringify({reset:true})});
   $('msgs').innerHTML='<div class="msg bot">记忆已清空，重新开始聊吧。</div>';
-  storyOn=false;$('storyMode').checked=false;storyPrev='';storySeg=0;};
+  storyOn=false;$('storyMode').checked=false;storyPrev='';storySeg=0;storySetting='';};
 
-/* ───────── 剧情连播：生成有剧情的小说片段，分角色朗读，播完自动续写 ───────── */
-let storyOn=false, storyPrev="", storyBusy=false, storySeg=0;
-async function storyNext(brief){
+/* ───────── 剧情连播：按用户设定创作有剧情的小说片段，分角色朗读，播完自动续写 ───────── */
+let storyOn=false, storyPrev="", storyBusy=false, storySeg=0, storySetting="";
+async function storyNext(){
   if(!storyOn||storyBusy)return;
   storyBusy=true;storySeg++;
   const t=addMsg('bot','');t.innerHTML='<span class="typing"><i></i><i></i><i></i></span>';
   chatStatus(`🎬 第 ${storySeg} 段剧情创作中…`);
   try{
     const r=await api('/api/chat/story',{method:'POST',headers:{'Content-Type':'application/json'},
-      body:JSON.stringify({brief, prev:storyPrev})});
+      body:JSON.stringify({brief:storySetting, prev:storyPrev})});
     const d=await r.json();
     const reply=d.reply||'……';
     storyPrev=reply;
@@ -909,7 +912,7 @@ async function storyNext(brief){
     if(lines){
         renderNovelBubble(t,lines);
         speakLines(t,lines,{},()=>{chatStatus('');storyBusy=false;
-          if(storyOn&&$('page-chat').classList.contains('active'))storyNext('');});
+          if(storyOn&&$('page-chat').classList.contains('active'))storyNext();});
         return;
     }
     t.textContent=reply;
@@ -919,7 +922,7 @@ async function storyNext(brief){
     const url=URL.createObjectURL(await ar.blob());
     const a=playAudio(url);
     a.onended=()=>{chatStatus('');storyBusy=false;
-      if(storyOn&&$('page-chat').classList.contains('active'))storyNext('');};
+      if(storyOn&&$('page-chat').classList.contains('active'))storyNext();};
     a.play().catch(()=>{chatStatus('播放被浏览器拦截，请点一下页面');storyBusy=false;});
   }catch(e){chatStatus('剧情创作失败: '+e.message);storyBusy=false;}
 }
@@ -929,9 +932,9 @@ $('storyMode').onchange=()=>{
     $('contMode').checked=false;   // 与连续对话互斥
     const v=$('chatInput').value.trim();
     $('chatInput').value='';
-    storyPrev='';storySeg=0;
-    addMsg('user',v||'给我演一段剧情');
-    storyNext(v);
+    storySetting=v;storyPrev='';storySeg=0;
+    addMsg('user',v?('【设定】'+v):'（自由发挥，无设定）');
+    storyNext();
   }else{
     chatStatus('剧情连播已停，本段播完即止');
   }
